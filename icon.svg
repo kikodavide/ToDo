@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="40" fill="#000"/>
+  <rect x="20" y="20" width="152" height="152" rx="30" fill="#0d0d0d" stroke="#1c1c1c" stroke-width="1.5"/>
+  <!-- Numero grande stile Orbitron -->
+  <text x="96" y="118" font-family="monospace" font-size="90" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-4">P</text>
+  <!-- Linea accent blu -->
+  <rect x="56" y="140" width="80" height="4" rx="2" fill="#2a3f6e"/>
+</svg>

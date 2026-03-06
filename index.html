@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Promemoria">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>Promemoria</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; margin: 0; padding: 0; }
+  .phone {
+    width: 100vw; height: 100vh; background: #000;
+    position: relative; overflow: hidden;
+  }
+
+  /* ── DATE ── */
+  .date-display {
+    position: absolute; top: 130px; left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex; flex-direction: column; align-items: center;
+    transition: top 0.3s ease, opacity 0.3s ease; z-index: 5;
+  }
+  .date-display.compact { top: 46px; }
+  .date-display.hidden-date { opacity: 0; pointer-events: none; }
+  .date-day {
+    font-family: 'Orbitron', sans-serif; font-weight: 400;
+    font-size: 130px; color: #fff; line-height: 0.9;
+    letter-spacing: -2px; display: block; white-space: nowrap;
+    transform-origin: center center; transition: font-size 0.3s ease;
+  }
+  .date-display.compact .date-day { font-size: 72px; }
+  .date-sub { display: flex; justify-content: space-between; margin-top: 4px; }
+  .date-sub span { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 4px; color: #fff; }
+
+  /* ── CONTENT AREA ── */
+  .content-area {
+    position: absolute; top: 330px; left: 0; right: 0; bottom: 80px;
+    overflow: hidden; transition: top 0.3s ease;
+  }
+  .content-area.compact { top: 185px; }
+  .content-area.full    { top: 0; }
+
+  /* ── PANELS ── */
+  .panel {
+    position: absolute; inset: 0; overflow-y: auto; scrollbar-width: none;
+    opacity: 0; pointer-events: none; transform: translateY(8px);
+    transition: opacity 0.25s, transform 0.25s;
+  }
+  .panel::-webkit-scrollbar { display: none; }
+  .panel.visible { opacity: 1; pointer-events: all; transform: translate(0,0) !important; }
+
+  #months-list  { transform: translateX(-20px); transition: opacity 0.3s ease, transform 0.3s ease; }
+  #form-panel   { transform: translateY(30px);  transition: opacity 0.3s ease, transform 0.3s ease; }
+  #cal-panel    { transform: translateX(-30px); transition: opacity 0.3s ease, transform 0.3s ease; }
+  #profile-panel{ transform: translateY(-30px); transition: opacity 0.3s ease, transform 0.3s ease; }
+
+  /* ── MONTHS LIST ── */
+  #months-list { padding: 0 20px 0 24px; }
+
+  /* ── MONTH BLOCK ── */
+  .month-block { position: relative; margin-bottom: 4px; }
+  .month-header { display: flex; align-items: center; padding: 10px 0 8px; cursor: pointer; user-select: none; overflow: visible; }
+  .month-name { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; color: #fff; }
+
+  /* Chevron: occupa sempre spazio, animiamo solo opacità — nessun salto */
+  .month-chevron {
+    color: #fff; font-size: 13px; margin: 2px 8px 0 8px; flex-shrink: 0;
+    opacity: 1;
+    transition: opacity 0.25s ease 0.55s; /* riappare PRIMA che il count torni */
+  }
+  .month-block.open .month-chevron {
+    opacity: 0;
+    transition: opacity 0.2s ease 0s; /* scompare subito all'apertura */
+  }
+
+  /* Count: usa uno spacer animato invece di margin-left auto */
+  .month-count {
+    font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 1px; color: #444;
+    flex-shrink: 0;
+  }
+  .month-spacer {
+    flex-grow: 0;
+    transition: flex-grow 0.7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .month-block.open .month-spacer { flex-grow: 1; }
+
+  /* ── ANIMAZIONE ENTRATA MESI ── */
+  @keyframes slideInMonth {
+    from { opacity: 0; transform: translateX(-20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .month-block { animation: slideInMonth 0.35s cubic-bezier(0.4,0,0.2,1) both; }
+
+  /* ── TENDINA ACCORDION ANIMATA ── */
+  .reminders-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.65s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease;
+    opacity: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .month-block.open .reminders-wrap { grid-template-rows: 1fr; opacity: 1; }
+  .reminders-wrap-inner { min-height: 0; padding-left: 18px; padding-bottom: 8px; position: relative; }
+
+  /* Linea verticale e chevron su */
+  .reminders-wrap-inner::before { content: ''; position: absolute; left: 0; top: 0; bottom: 20px; width: 1.5px; background: #2a3f6e; }
+  .reminders-wrap-bottom {
+    position: relative; padding-left: 18px; height: 16px;
+    display: none;
+  }
+  .month-block.open .reminders-wrap-bottom { display: block; }
+  .reminders-wrap-bottom::before { content: '∧'; position: absolute; left: 0; top: 0; font-size: 13px; color: #2a3f6e; line-height: 1; transform: translateX(-50%); }
+
+  /* ── ANIMAZIONE CARD DENTRO ACCORDION ── */
+  @keyframes fadeInCard {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .month-block.open .swipe-container,
+  .month-block.open .reminder-card:not(.swipe-container .reminder-card) {
+    animation: fadeInCard 0.35s ease both;
+  }
+  /* ── SWIPEABLE CARD ── */
+  .swipe-container {
+    position: relative; overflow: hidden;
+    border-radius: 10px; margin-bottom: 8px;
+  }
+  .swipe-container:last-child { margin-bottom: 0; }
+
+  .delete-bg {
+    position: absolute; inset: 0;
+    background: #3d0000;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 18px; border-radius: 10px;
+  }
+  .delete-bg span {
+    font-family: 'Bebas Neue', sans-serif; font-size: 16px;
+    letter-spacing: 2px; color: #ff3333;
+  }
+
+  .reminder-card {
+    background: #0d0d0d; border: 1px solid #1c1c1c;
+    border-radius: 10px; padding: 9px 12px;
+    cursor: pointer; position: relative;
+    transform: translateX(0); transition: transform 0.2s ease;
+    user-select: none;
+  }
+  .reminder-card.swiped { transform: translateX(-80px); }
+
+  .reminder-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .reminder-date-str { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 1.5px; color: #2a3f6e; }
+  .reminder-time-str  { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 1px;   color: #2a3f6e; }
+  .reminder-title     { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1.5px; color: #fff; }
+  .edit-hint { font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 2px; color: #222; margin-top: 2px; }
+
+  /* ── FORM PANEL ── */
+  #form-panel {
+    padding: 8px 20px 12px 20px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    overflow: hidden;
+  }
+  .form-title { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 3px; color: #2a3f6e; margin-bottom: 10px; }
+  .field-group { margin-bottom: 8px; }
+  .field-label { font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 3px; color: #333; margin-bottom: 4px; }
+  .field-input {
+    width: 100%; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px;
+    padding: 9px 14px; font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+    letter-spacing: 2px; color: #fff; outline: none; transition: border-color 0.2s; color-scheme: dark;
+  }
+  .field-input::placeholder { color: #222; }
+  .field-input:focus { border-color: #2a3f6e; }
+  .field-input.error { border-color: #ff3333; animation: shake 0.35s ease; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-6px); }
+    40%     { transform: translateX(6px); }
+    60%     { transform: translateX(-4px); }
+    80%     { transform: translateX(4px); }
+  }
+  .field-error-msg {
+    font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 2px;
+    color: #ff3333; margin-top: 3px; opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .field-error-msg.visible { opacity: 1; }
+  .time-row { display: flex; gap: 10px; align-items: center; }
+  .time-row .field-input { flex: 1; }
+  .time-sep { font-family: 'Bebas Neue', sans-serif; font-size: 18px; color: #2a3f6e; flex-shrink: 0; }
+
+  .form-btn-row { display: flex; gap: 10px; margin-top: 10px; }
+  .save-btn, .delete-btn {
+    flex: 1; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .save-btn  { background: #2a3f6e; box-shadow: 0 0 20px rgba(42,63,110,0.4); }
+  .delete-btn { background: #1a0000; border: 1px solid #3d0000; }
+  .save-btn span, .delete-btn span {
+    font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 3px; color: #fff;
+  }
+  .delete-btn span { color: #ff3333; }
+  .delete-btn.hidden { display: none; }
+
+  /* Notifica info box */
+  .notif-info {
+    background: #060d1a; border: 1px solid #0d1f3c;
+    border-radius: 10px; padding: 7px 12px; margin-top: 8px;
+  }
+  .notif-info-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 11px;
+    letter-spacing: 3px; color: #2a3f6e; margin-bottom: 4px;
+  }
+  .notif-info-row {
+    font-family: 'Bebas Neue', sans-serif; font-size: 13px;
+    letter-spacing: 1px; color: #556; margin-bottom: 2px;
+  }
+  .notif-info-row.active { color: #7a9fd4; }
+
+  /* ── CALENDAR ── */
+  #cal-panel { padding: 0 16px 16px; }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 14px; }
+  .cal-nav-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 3px; color: #fff; transition: opacity 0.2s; }
+  .cal-nav-btn { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: #2a3f6e; cursor: pointer; padding: 4px 8px; user-select: none; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 6px; }
+  .cal-wd { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1px; color: #333; text-align: center; padding: 2px 0; }
+
+  /* Griglia con clip per slide direzionale */
+  .cal-grid-wrap { overflow: hidden; position: relative; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+
+  /* Animazioni slide mese */
+  @keyframes slideInRight { from { opacity:0; transform: translateX(40px); } to { opacity:1; transform: translateX(0); } }
+  @keyframes slideInLeft  { from { opacity:0; transform: translateX(-40px); } to { opacity:1; transform: translateX(0); } }
+  .cal-grid.slide-right { animation: slideInRight 0.28s cubic-bezier(0.4,0,0.2,1) both; }
+  .cal-grid.slide-left  { animation: slideInLeft  0.28s cubic-bezier(0.4,0,0.2,1) both; }
+
+  /* Cascata giorni */
+  @keyframes fadeDay { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+  .cal-row-anim { animation: fadeDay 0.25s ease both; }
+
+  .cal-cell { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer; transition: transform 0.15s ease; }
+  .cal-cell:active { transform: scale(0.88); }
+  .cal-cell.empty { cursor: default; }
+  .cal-cell.today { background: #2a3f6e; box-shadow: 0 0 8px rgba(42,63,110,0.6); }
+  .cal-cell.selected:not(.today) { background: #111; }
+
+  /* Pulse al tap */
+  @keyframes tapPulse { 0%{transform:scale(1)} 40%{transform:scale(0.82)} 70%{transform:scale(1.08)} 100%{transform:scale(1)} }
+  .cal-cell.tapped { animation: tapPulse 0.32s ease both; }
+
+  .cal-num { font-family: 'Orbitron', sans-serif; font-weight: 400; font-size: 14px; color: #666; line-height: 1; }
+  .cal-cell.today .cal-num, .cal-cell.has-reminder .cal-num { color: #fff; }
+
+  /* Pallino con bounce */
+  @keyframes dotBounce { 0%{transform:scale(0)} 60%{transform:scale(1.4)} 80%{transform:scale(0.85)} 100%{transform:scale(1)} }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: #2a3f6e; margin-top: 3px; animation: dotBounce 0.45s cubic-bezier(0.4,0,0.2,1) both; }
+  .cal-cell.today .cal-dot { background: #fff; }
+
+  /* Detail panel slide su */
+  #day-detail { overflow: hidden; max-height: 0; transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease; opacity: 0; }
+  #day-detail.open { max-height: 300px; opacity: 1; }
+
+  .section-label { font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 3px; color: #2a3f6e; margin-bottom: 10px; }
+
+  /* ── PROFILE ── */
+  #profile-panel { padding: 0 20px 120px; }
+  .profile-header { display: flex; flex-direction: column; align-items: center; padding: 24px 0 22px; }
+  .avatar-wrap { width: 84px; height: 84px; border-radius: 50%; background: #0d0d0d; border: 2px solid #2a3f6e; box-shadow: 0 0 14px rgba(42,63,110,0.4); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; overflow: hidden; cursor: pointer; }
+  .avatar-wrap img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: none; }
+  .username-display { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 3px; color: #fff; cursor: pointer; }
+  .username-input { display: none; background: transparent; border: none; border-bottom: 1px solid #2a3f6e; font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 3px; color: #fff; text-align: center; outline: none; width: 200px; }
+  .section-divider { height: 1px; background: #111; margin: 0 0 20px; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+  .stat-card { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 12px; padding: 14px; }
+  .stat-num { font-family: 'Orbitron', sans-serif; font-size: 32px; color: #fff; line-height: 1; }
+  .stat-label { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 2px; color: #444; margin-top: 4px; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .setting-label { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: #fff; }
+  .toggle { width: 44px; height: 24px; border-radius: 12px; position: relative; cursor: pointer; transition: background 0.25s; flex-shrink: 0; }
+  .toggle.on  { background: #2a3f6e; box-shadow: 0 0 8px rgba(42,63,110,0.5); }
+  .toggle.off { background: #1a1a1a; border: 1px solid #222; }
+  .toggle-knob { position: absolute; top: 3px; width: 18px; height: 18px; border-radius: 50%; transition: left 0.25s, background 0.25s; }
+  .toggle.on  .toggle-knob { left: 22px; background: #fff; }
+  .toggle.off .toggle-knob { left: 3px;  background: #333; }
+
+  .notif-stepper-btn {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: #1a1a1a; border: 1px solid #2a3f6e;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+    color: #2a3f6e; cursor: pointer; user-select: none;
+    flex-shrink: 0;
+  }
+
+  /* ── FADE ── */
+  .months-fade { position: absolute; bottom: 80px; left: 0; right: 0; height: 60px; background: linear-gradient(to bottom, transparent, #000); pointer-events: none; z-index: 10; transition: opacity 0.25s; }
+
+  /* ── ICONS ── */
+  .icon-btn { position: absolute; width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: rgba(42,63,110,0.12); box-shadow: 0 0 6px rgba(42,63,110,0.35), 0 0 14px rgba(42,63,110,0.15); cursor: pointer; z-index: 20; }
+  .icon-btn.active { background: rgba(42,63,110,0.35); box-shadow: 0 0 10px rgba(42,63,110,0.7); }
+  .icon-btn svg { width: 30px; height: 30px; }
+  .icon-profile  { top: 28px; right: 20px; }
+  .icon-calendar { bottom: 28px; left: 20px; }
+  .icon-add      { bottom: 28px; right: 20px; }
+  .home-indicator { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 100px; height: 4px; background: #222; border-radius: 2px; }
+  .camera-dot { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: #111; border-radius: 50%; border: 1px solid #222; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="date-display" id="date-display">
+    <span class="date-day" id="day">05</span>
+    <div class="date-sub" id="sub">
+      <span id="month-label">marzo</span>
+      <span id="year-label">2026</span>
+    </div>
+  </div>
+
+  <div class="content-area" id="content-area">
+
+    <!-- LISTA MESI -->
+    <div class="panel visible" id="months-list"></div>
+
+    <!-- FORM (aggiungi / modifica) -->
+    <div class="panel" id="form-panel">
+      <div class="form-title" id="form-title">nuovo promemoria</div>
+      <div class="field-group">
+        <div class="field-label">titolo</div>
+        <input class="field-input" type="text" id="inp-title" placeholder="es. Visita medica">
+        <div class="field-error-msg" id="err-title">inserisci un titolo</div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">data</div>
+        <input class="field-input" type="date" id="inp-date">
+        <div class="field-error-msg" id="err-date">inserisci una data</div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">orario</div>
+        <div class="time-row">
+          <input class="field-input" type="time" id="inp-start">
+          <span class="time-sep">—</span>
+          <input class="field-input" type="time" id="inp-end">
+        </div>
+        <div class="field-error-msg" id="err-time">l'orario di fine deve essere dopo l'inizio</div>
+      </div>
+
+      <!-- Box notifiche calcolate -->
+      <div class="notif-info" id="notif-info" style="display:none;">
+        <div class="notif-info-title">notifiche programmate</div>
+        <div id="notif-rows"></div>
+      </div>
+
+      <div class="form-btn-row">
+        <div class="save-btn" id="save-btn"><span>salva</span></div>
+        <div class="delete-btn hidden" id="delete-btn"><span>elimina</span></div>
+      </div>
+    </div>
+
+    <!-- CALENDARIO -->
+    <div class="panel" id="cal-panel">
+      <div class="cal-nav">
+        <span class="cal-nav-btn" id="cal-prev">&#8592;</span>
+        <span class="cal-nav-title" id="cal-title"></span>
+        <span class="cal-nav-btn" id="cal-next">&#8594;</span>
+      </div>
+      <div class="cal-weekdays">
+        <div class="cal-wd">L</div><div class="cal-wd">M</div><div class="cal-wd">M</div>
+        <div class="cal-wd">G</div><div class="cal-wd">V</div><div class="cal-wd">S</div><div class="cal-wd">D</div>
+      </div>
+      <div class="cal-grid-wrap">
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+      <div id="day-detail">
+        <div style="height:1px; background:#1a1a1a; margin: 14px 0;"></div>
+        <div id="day-detail-title" class="section-label"></div>
+        <div id="day-detail-content"></div>
+      </div>
+    </div>
+
+    <!-- PROFILO -->
+    <div class="panel" id="profile-panel">
+      <div class="profile-header">
+        <div class="avatar-wrap" id="avatar-wrap">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" id="avatar-placeholder">
+            <circle cx="12" cy="9" r="4" stroke="#2a3f6e" stroke-width="1.8"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#2a3f6e" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <img id="avatar-img" src="">
+        </div>
+        <input type="file" id="avatar-input" accept="image/*" style="display:none;">
+        <div class="username-display" id="username-display">il tuo nome</div>
+        <input class="username-input" id="username-input" type="text" placeholder="il tuo nome">
+      </div>
+      <div class="section-divider"></div>
+      <div class="section-label">statistiche</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num" id="stat-total">5</div><div class="stat-label">totale</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-month">2</div><div class="stat-label">questo mese</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-next">3</div><div class="stat-label">prossimi</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-active">7</div><div class="stat-label">mesi attivi</div></div>
+      </div>
+      <div class="section-divider"></div>
+      <div class="section-label">impostazioni</div>
+      <div class="setting-row"><span class="setting-label">notifiche</span><div class="toggle on" id="tog-notif"><div class="toggle-knob"></div></div></div>
+      <div class="setting-row"><span class="setting-label">suono</span><div class="toggle off" id="tog-sound"><div class="toggle-knob"></div></div></div>
+      <div class="setting-row"><span class="setting-label">vibrazione</span><div class="toggle on" id="tog-vibra"><div class="toggle-knob"></div></div></div>
+
+      <div class="section-divider" style="margin-top:20px;"></div>
+      <div class="section-label">anticipo notifiche</div>
+
+      <!-- Caso 1: evento prima delle 9 -->
+      <div style="background:#0d0d0d; border:1px solid #1c1c1c; border-radius:12px; padding:14px 16px; margin-bottom:10px;">
+        <div style="font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:3px; color:#2a3f6e; margin-bottom:10px;">evento prima delle 9:00</div>
+        <div style="font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:1px; color:#444; margin-bottom:6px;">notifica serale (ore fisse alle 22:00 del giorno prima)</div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+          <span style="font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:2px; color:#666; flex:1;">seconda notifica — ore prima</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="notif-stepper-btn" onclick="changeHours('early', -1)">&#8722;</div>
+            <span style="font-family:'Orbitron',sans-serif; font-size:20px; color:#fff; min-width:28px; text-align:center;" id="early-hours-display">2</span>
+            <div class="notif-stepper-btn" onclick="changeHours('early', +1)">&#43;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Caso 2: evento dalle 9 in poi -->
+      <div style="background:#0d0d0d; border:1px solid #1c1c1c; border-radius:12px; padding:14px 16px; margin-bottom:10px;">
+        <div style="font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:3px; color:#2a3f6e; margin-bottom:10px;">evento dalle 9:00 in poi</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:2px; color:#666; flex:1;">notifica — ore prima</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="notif-stepper-btn" onclick="changeHours('late', -1)">&#8722;</div>
+            <span style="font-family:'Orbitron',sans-serif; font-size:20px; color:#fff; min-width:28px; text-align:center;" id="late-hours-display">3</span>
+            <div class="notif-stepper-btn" onclick="changeHours('late', +1)">&#43;</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="months-fade" id="fade"></div>
+  <div id="profile-fade" style="position:absolute; bottom:80px; left:0; right:0; height:100px; background:linear-gradient(to bottom,transparent,#000 50%); pointer-events:none; z-index:10; opacity:0; transition:opacity 0.25s;"></div>
+  <div id="icons-bar-bg" style="position:absolute; bottom:0; left:0; right:0; height:80px; background:#000; z-index:11;"></div>
+
+  <div class="icon-btn icon-profile" id="btn-profile">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="#2a3f6e" stroke-width="1.8"/>
+      <circle cx="12" cy="9" r="3.2" fill="#2a3f6e"/>
+      <path d="M5.5 19.5C6.5 16.5 9 14.8 12 14.8s5.5 1.7 6.5 4.7" stroke="#2a3f6e" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="icon-btn icon-calendar" id="btn-cal">
+    <svg viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="17" rx="3" stroke="#2a3f6e" stroke-width="1.8"/>
+      <line x1="7" y1="2" x2="7" y2="6" stroke="#2a3f6e" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="17" y1="2" x2="17" y2="6" stroke="#2a3f6e" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="3" y1="9" x2="21" y2="9" stroke="#2a3f6e" stroke-width="1.4"/>
+      <circle cx="12" cy="15" r="2.2" fill="#2a3f6e"/>
+    </svg>
+  </div>
+  <div class="icon-btn icon-add" id="btn-add">
+    <svg viewBox="0 0 24 24" fill="none">
+      <rect x="2.5" y="2.5" width="19" height="19" rx="7" stroke="#2a3f6e" stroke-width="1.8"/>
+      <line x1="12" y1="7.5" x2="12" y2="16.5" stroke="#2a3f6e" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="7.5" y1="12" x2="16.5" y2="12" stroke="#2a3f6e" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+  </div>
+</div>
+
+<script>
+  const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+  const mesiShort = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear  = now.getFullYear();
+  const pad = n => String(n).padStart(2, '0');
+
+  // ── DATA DISPLAY ──
+  const dayEl = document.getElementById('day');
+  const subEl = document.getElementById('sub');
+  dayEl.textContent = pad(now.getDate());
+  document.getElementById('month-label').textContent = mesi[currentMonth];
+  document.getElementById('year-label').textContent  = currentYear;
+  document.fonts.ready.then(() => {
+    const subW = subEl.offsetWidth;
+    dayEl.style.transform = `scaleX(${subW / dayEl.offsetWidth})`;
+  });
+
+  // ── STORAGE ──
+  const STORAGE_KEY = 'promemoria_v1';
+
+  let reminders = [];
+  let nextId    = 1;
+  let notifConfig = { early: 2, late: 3 };
+
+  function saveAll() {
+    try {
+      const data = {
+        reminders, nextId, notifConfig,
+        username: document.getElementById('username-display').textContent,
+        avatar: (() => { const img = document.getElementById('avatar-img'); return img.style.display !== 'none' ? img.src : null; })(),
+        toggles: {
+          notif: document.getElementById('tog-notif').classList.contains('on'),
+          sound: document.getElementById('tog-sound').classList.contains('on'),
+          vibra: document.getElementById('tog-vibra').classList.contains('on'),
+        },
+        scheduledNotifs: JSON.parse(localStorage.getItem(STORAGE_KEY + '_notifs') || '[]')
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch(e) { console.warn('saveAll error', e); }
+  }
+
+  function setToggle(id, on) {
+    const el = document.getElementById(id);
+    el.classList.toggle('on',  !!on);
+    el.classList.toggle('off', !on);
+  }
+
+  function loadAll() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      reminders   = data.reminders   || [];
+      nextId      = data.nextId      || 1;
+      notifConfig = data.notifConfig || { early: 2, late: 3 };
+      document.getElementById('early-hours-display').textContent = notifConfig.early;
+      document.getElementById('late-hours-display').textContent  = notifConfig.late;
+      if (data.username && data.username !== 'il tuo nome')
+        document.getElementById('username-display').textContent = data.username;
+      if (data.avatar) {
+        const img = document.getElementById('avatar-img');
+        img.src = data.avatar; img.style.display = 'block';
+        document.getElementById('avatar-placeholder').style.display = 'none';
+      }
+      if (data.toggles) {
+        setToggle('tog-notif', data.toggles.notif !== false);
+        setToggle('tog-sound', data.toggles.sound === true);
+        setToggle('tog-vibra', data.toggles.vibra !== false);
+      }
+    } catch(e) { console.warn('loadAll error', e); }
+  }
+
+  // ── SERVICE WORKER (file esterno sw.js) ──
+  let swReg = null;
+  async function initSW() {
+    if (!('serviceWorker' in navigator)) return;
+    try {
+      swReg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+      await navigator.serviceWorker.ready;
+    } catch(e) { console.warn('SW non disponibile:', e.message); }
+  }
+  initSW();
+
+  // Mappa notifiche schedulate: reminderId -> array di { triggerMs, label }
+  let scheduledMap = {};
+
+  function loadScheduledMap() {
+    try { scheduledMap = JSON.parse(localStorage.getItem(STORAGE_KEY + '_notifs') || '{}'); } catch(e) { scheduledMap = {}; }
+  }
+  function saveScheduledMap() {
+    localStorage.setItem(STORAGE_KEY + '_notifs', JSON.stringify(scheduledMap));
+  }
+
+  // ── LOGICA NOTIFICHE ──
+  function calcNotifications(dateStr, timeStart) {
+    if (!dateStr || !timeStart) return [];
+    const [y, mo, d] = dateStr.split('-').map(Number);
+    const [h, m]     = timeStart.split(':').map(Number);
+    const startH     = h + m / 60;
+    const results    = [];
+
+    if (startH < 9) {
+      const prev = new Date(y, mo-1, d-1);
+      results.push({
+        triggerMs: new Date(y, mo-1, d-1, 22, 0, 0).getTime(),
+        label: `${pad(prev.getDate())} ${mesi[prev.getMonth()]} alle 22:00`,
+        desc:  'giorno precedente'
+      });
+      const eh = h - notifConfig.early;
+      results.push({
+        triggerMs: new Date(y, mo-1, d, Math.max(0, eh), m, 0).getTime(),
+        label: `${pad(d)} ${mesi[mo-1]} alle ${pad(Math.max(0,eh))}:${pad(m)}`,
+        desc:  `${notifConfig.early} ore prima`
+      });
+    } else {
+      let th = h - notifConfig.late, td = d, tmo = mo, ty = y;
+      if (th < 0) { th += 24; td--; }
+      results.push({
+        triggerMs: new Date(ty, tmo-1, td, th, m, 0).getTime(),
+        label: `${pad(td)} ${mesi[tmo-1]} ${ty} alle ${pad(th)}:${pad(m)}`,
+        desc:  `${notifConfig.late} ore prima`
+      });
+    }
+    return results;
+  }
+
+  function updateNotifBox() {
+    const dateVal  = document.getElementById('inp-date').value;
+    const startVal = document.getElementById('inp-start').value;
+    const box      = document.getElementById('notif-info');
+    const rows     = document.getElementById('notif-rows');
+    if (!dateVal || !startVal) { box.style.display = 'none'; return; }
+    const notifs = calcNotifications(dateVal, startVal);
+    rows.innerHTML = notifs.map(n =>
+      `<div class="notif-info-row active">&#9679; ${n.desc} — ${n.label}</div>`
+    ).join('');
+    box.style.display = 'block';
+  }
+
+  document.getElementById('inp-date').addEventListener('change',  updateNotifBox);
+  document.getElementById('inp-start').addEventListener('change', updateNotifBox);
+
+  // Invia notifica tramite SW (se disponibile) oppure setTimeout
+  async function scheduleNotification(remId, notifIndex, title, body, triggerMs) {
+    const delay = triggerMs - Date.now();
+    if (delay <= 0) return;
+    const notifTitle = `promemoria: ${title}`;
+
+    if (swReg && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'SCHEDULE', id: `${remId}_${notifIndex}`,
+        title: notifTitle, body, triggerMs
+      });
+    } else {
+      // Fallback setTimeout (funziona solo a schermo aperto)
+      setTimeout(async () => {
+        if (Notification.permission === 'granted') {
+          new Notification(notifTitle, { body, icon: '' });
+        }
+      }, delay);
+    }
+  }
+
+  function cancelNotifications(remId) {
+    if (swReg && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CANCEL', id: remId });
+    }
+    delete scheduledMap[remId];
+    saveScheduledMap();
+  }
+
+  async function scheduleAllNotifs(rem) {
+    if (!document.getElementById('tog-notif').classList.contains('on')) return;
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+
+    cancelNotifications(rem.id);
+    const dateStr = `${rem.year || currentYear}-${pad(rem.month+1)}-${pad(rem.day)}`;
+    const notifs  = calcNotifications(dateStr, rem.timeStart);
+    scheduledMap[rem.id] = notifs.map(n => ({ triggerMs: n.triggerMs, label: n.label }));
+    saveScheduledMap();
+
+    notifs.forEach((n, i) => {
+      const body = n.desc === 'giorno precedente'
+        ? `domani: ${rem.title} alle ${rem.timeStart}`
+        : `${rem.title} inizia alle ${rem.timeStart}`;
+      scheduleNotification(rem.id, i, rem.title, body, n.triggerMs);
+    });
+  }
+
+  // Rischedula tutte le notifiche pendenti (chiamato all'apertura app)
+  function rescheduleAllPending() {
+    if (!document.getElementById('tog-notif').classList.contains('on')) return;
+    if (Notification.permission !== 'granted') return;
+    loadScheduledMap();
+    reminders.forEach(rem => {
+      const entries = scheduledMap[rem.id];
+      if (!entries) return;
+      entries.forEach((entry, i) => {
+        if (entry.triggerMs > Date.now()) {
+          const body = `${rem.title} alle ${rem.timeStart}`;
+          scheduleNotification(rem.id, i, rem.title, body, entry.triggerMs);
+        }
+      });
+    });
+  }
+
+  // ── VIEW MANAGER ──
+  let view = 'list', editingId = null;
+  const dateDisplay = document.getElementById('date-display');
+  const contentArea = document.getElementById('content-area');
+  const fade        = document.getElementById('fade');
+  const panels = {
+    list:     document.getElementById('months-list'),
+    form:     document.getElementById('form-panel'),
+    calendar: document.getElementById('cal-panel'),
+    profile:  document.getElementById('profile-panel'),
+  };
+
+  function switchView(v) {
+    Object.values(panels).forEach(p => p.classList.remove('visible'));
+    dateDisplay.classList.remove('compact','hidden-date');
+    contentArea.classList.remove('compact','full');
+    if (v === 'calendar') { dateDisplay.classList.add('compact'); contentArea.classList.add('compact'); }
+    if (v === 'profile')  { dateDisplay.classList.add('hidden-date'); contentArea.classList.add('full'); }
+    fade.style.opacity = v === 'list' ? '1' : '0';
+    document.getElementById('profile-fade').style.opacity = v === 'profile' ? '1' : '0';
+    document.getElementById('btn-add').classList.toggle('active',     v === 'form');
+    document.getElementById('btn-cal').classList.toggle('active',     v === 'calendar');
+    document.getElementById('btn-profile').classList.toggle('active', v === 'profile');
+    panels[v].classList.add('visible');
+    view = v;
+  }
+
+  // ── FORM ──
+  function openNewForm() {
+    editingId = null;
+    document.getElementById('form-title').textContent = 'nuovo promemoria';
+    document.getElementById('inp-title').value  = '';
+    document.getElementById('inp-start').value  = '';
+    document.getElementById('inp-end').value    = '';
+    document.getElementById('inp-date').value   = `${currentYear}-${pad(currentMonth+1)}-${pad(now.getDate())}`;
+    document.getElementById('delete-btn').classList.add('hidden');
+    document.getElementById('notif-info').style.display = 'none';
+    clearErrors();
+    switchView('form');
+    setTimeout(() => document.getElementById('inp-title').focus(), 320);
+  }
+
+  function openEditForm(id) {
+    const rem = reminders.find(r => r.id === id);
+    if (!rem) return;
+    editingId = id;
+    document.getElementById('form-title').textContent = 'modifica promemoria';
+    document.getElementById('inp-title').value = rem.title;
+    const y = rem.year || currentYear;
+    document.getElementById('inp-date').value  = `${y}-${pad(rem.month+1)}-${pad(rem.day)}`;
+    document.getElementById('inp-start').value = rem.timeStart;
+    document.getElementById('inp-end').value   = rem.timeEnd;
+    document.getElementById('delete-btn').classList.remove('hidden');
+    updateNotifBox();
+    clearErrors();
+    switchView('form');
+    setTimeout(() => document.getElementById('inp-title').focus(), 320);
+  }
+
+  // ── VALIDAZIONE ──
+  function showError(inputId, msgId) {
+    const inp = document.getElementById(inputId);
+    const msg = document.getElementById(msgId);
+    inp.classList.remove('error'); void inp.offsetWidth; inp.classList.add('error');
+    msg.classList.add('visible');
+    inp.addEventListener('input', () => { inp.classList.remove('error'); msg.classList.remove('visible'); }, { once: true });
+  }
+  function clearErrors() {
+    ['inp-title','inp-date','inp-start','inp-end'].forEach(id => document.getElementById(id).classList.remove('error'));
+    ['err-title','err-date','err-time'].forEach(id => document.getElementById(id).classList.remove('visible'));
+  }
+
+  // ── SALVA PROMEMORIA ──
+  document.getElementById('save-btn').addEventListener('click', () => {
+    const title = document.getElementById('inp-title').value.trim();
+    const dateV = document.getElementById('inp-date').value;
+    const start = document.getElementById('inp-start').value;
+    const end   = document.getElementById('inp-end').value;
+    let hasError = false;
+    if (!title) { showError('inp-title', 'err-title'); hasError = true; }
+    if (!dateV) { showError('inp-date',  'err-date');  hasError = true; }
+    if (start && end && end <= start) {
+      const endEl = document.getElementById('inp-end');
+      endEl.classList.remove('error'); void endEl.offsetWidth; endEl.classList.add('error');
+      document.getElementById('err-time').classList.add('visible');
+      hasError = true;
+    }
+    if (hasError) return;
+    clearErrors();
+
+    const [y, mo, d] = dateV.split('-').map(Number);
+    const monthIdx   = mo - 1;
+    const dateLabel  = `${d} ${mesi[monthIdx]}`;
+
+    if (editingId !== null) {
+      const i = reminders.findIndex(r => r.id === editingId);
+      if (i > -1) {
+        cancelNotifications(reminders[i].id);
+        reminders[i] = { ...reminders[i], title, day: d, month: monthIdx, year: y, date: dateLabel, timeStart: start, timeEnd: end };
+        scheduleAllNotifs(reminders[i]);
+      }
+    } else {
+      const rem = { id: nextId++, month: monthIdx, year: y, day: d, date: dateLabel, timeStart: start, timeEnd: end, title };
+      reminders.push(rem);
+      scheduleAllNotifs(rem);
+    }
+
+    saveAll();
+    rebuildList();
+    updateStats();
+    switchView('list');
+  });
+
+  // ── ELIMINA PROMEMORIA ──
+  document.getElementById('delete-btn').addEventListener('click', () => {
+    if (editingId !== null) {
+      cancelNotifications(editingId);
+      reminders = reminders.filter(r => r.id !== editingId);
+      saveAll(); rebuildList(); updateStats();
+    }
+    switchView('list');
+  });
+
+  document.getElementById('btn-add').addEventListener('click',     () => view === 'form'     ? switchView('list') : openNewForm());
+  document.getElementById('btn-cal').addEventListener('click',     () => switchView(view === 'calendar' ? 'list' : 'calendar'));
+  document.getElementById('btn-profile').addEventListener('click', () => switchView(view === 'profile'  ? 'list' : 'profile'));
+
+  // ── SWIPE TO DELETE ──
+  function addSwipe(cardEl) {
+    let startX = 0, currentX = 0, dragging = false;
+    const onStart = x => { startX = x; dragging = true; currentX = 0; };
+    const onMove  = x => { if (!dragging) return; currentX = x - startX; if (currentX < 0) cardEl.style.transform = `translateX(${Math.max(currentX, -80)}px)`; };
+    const onEnd   = () => {
+      if (!dragging) return; dragging = false;
+      if (currentX < -50) { cardEl.style.transform = 'translateX(-80px)'; cardEl.classList.add('swiped'); }
+      else                 { cardEl.style.transform = 'translateX(0)';     cardEl.classList.remove('swiped'); }
+    };
+    cardEl.addEventListener('touchstart', e => onStart(e.touches[0].clientX), { passive: true });
+    cardEl.addEventListener('touchmove',  e => onMove(e.touches[0].clientX),  { passive: true });
+    cardEl.addEventListener('touchend',   onEnd);
+    cardEl.addEventListener('mousedown',  e => onStart(e.clientX));
+    window.addEventListener('mousemove',  e => onMove(e.clientX));
+    window.addEventListener('mouseup',    onEnd);
+  }
+
+  // ── LISTA MESI (multi-anno, con promemoria passati) ──
+  function rebuildList() {
+    const list = document.getElementById('months-list');
+    list.innerHTML = '';
+
+    // Blocchi da mostrare: 24 mesi in avanti dal mese corrente
+    let animIdx = 0;
+    for (let i = 0; i < 24; i++) {
+      const totalMonth = currentMonth + i;
+      const m = totalMonth % 12;
+      const y = currentYear + Math.floor(totalMonth / 12);
+
+      const rems  = reminders.filter(r => r.month === m && (r.year || currentYear) === y)
+                              .sort((a, b) => a.day - b.day);
+      const count = rems.length;
+
+      const block = document.createElement('div');
+      block.className = 'month-block' + (i === 0 ? ' open' : '');
+
+      let cardsHTML = count > 0
+        ? rems.map(r => `
+            <div class="swipe-container" data-id="${r.id}">
+              <div class="delete-bg"><span>elimina</span></div>
+              <div class="reminder-card" data-id="${r.id}">
+                <div class="reminder-top">
+                  <span class="reminder-date-str">${r.date}</span>
+                  <span class="reminder-time-str">${r.timeStart} — ${r.timeEnd}</span>
+                </div>
+                <div class="reminder-title">${r.title}</div>
+                <div class="edit-hint">tocca per modificare · scorri per eliminare</div>
+              </div>
+            </div>`).join('')
+        : `<div class="reminder-card"><div class="reminder-title" style="color:#333">nessun promemoria</div></div>`;
+
+      const countLabel = `<span class="month-count">${count > 0 ? count + ' promemoria' : 'nessun promemoria'}</span>`;
+      // Mostra l'anno quando cambia rispetto al blocco precedente
+      const showYear = (i === 0 && y !== currentYear) || (m === 0 && i > 0);
+      const monthNameHTML = showYear
+        ? `${mesi[m]} <span style="font-size:14px;letter-spacing:2px;color:#2a3f6e;margin-left:4px">${y}</span>`
+        : mesi[m];
+
+      block.innerHTML = `
+        <div class="month-header">
+          <span class="month-name">${monthNameHTML}</span>
+          <span class="month-chevron">&#8744;</span>
+          <span class="month-spacer"></span>
+          ${countLabel}
+        </div>
+        <div class="reminders-wrap"><div class="reminders-wrap-inner">${cardsHTML}</div></div>
+        <div class="reminders-wrap-bottom"></div>`;
+
+      block.style.animationDelay = `${animIdx * 0.07}s`;
+      animIdx++;
+
+      block.querySelector('.month-header').addEventListener('click', () => block.classList.toggle('open'));
+
+      block.querySelectorAll('.swipe-container').forEach(container => {
+        const rid  = parseInt(container.dataset.id);
+        const card = container.querySelector('.reminder-card');
+        addSwipe(card);
+        card.addEventListener('click', () => {
+          if (card.classList.contains('swiped')) { card.style.transform = 'translateX(0)'; card.classList.remove('swiped'); return; }
+          openEditForm(rid);
+        });
+        container.querySelector('.delete-bg').addEventListener('click', () => {
+          cancelNotifications(rid);
+          reminders = reminders.filter(r => r.id !== rid);
+          saveAll(); rebuildList(); updateStats();
+        });
+      });
+
+      list.appendChild(block);
+    }
+
+    // Aggiunge eventuali promemoria di mesi passati (non inclusi nei 24 in avanti)
+    const pastRems = reminders.filter(r => {
+      const ry = r.year || currentYear;
+      return ry < currentYear || (ry === currentYear && r.month < currentMonth);
+    });
+    if (pastRems.length > 0) {
+      // Raggruppa per anno-mese
+      const groups = {};
+      pastRems.forEach(r => {
+        const ry = r.year || currentYear;
+        const key = `${ry}-${String(r.month).padStart(2,'0')}`;
+        if (!groups[key]) groups[key] = { y: ry, m: r.month, rems: [] };
+        groups[key].rems.push(r);
+      });
+      const sortedKeys = Object.keys(groups).sort();
+      // Sezione "passati" in fondo
+      const divider = document.createElement('div');
+      divider.style.cssText = 'font-family:"Bebas Neue",sans-serif;font-size:11px;letter-spacing:3px;color:#2a3f6e;padding:16px 20px 4px;';
+      divider.textContent = 'promemoria passati';
+      list.appendChild(divider);
+
+      sortedKeys.forEach(key => {
+        const g = groups[key];
+        const rems = g.rems.sort((a,b) => a.day - b.day);
+        const block = document.createElement('div');
+        block.className = 'month-block';
+        block.style.opacity = '0.55';
+        const count = rems.length;
+        const cardsHTML = rems.map(r => `
+          <div class="swipe-container" data-id="${r.id}">
+            <div class="delete-bg"><span>elimina</span></div>
+            <div class="reminder-card" data-id="${r.id}">
+              <div class="reminder-top">
+                <span class="reminder-date-str">${r.date}</span>
+                <span class="reminder-time-str">${r.timeStart} — ${r.timeEnd}</span>
+              </div>
+              <div class="reminder-title">${r.title}</div>
+              <div class="edit-hint">tocca per modificare · scorri per eliminare</div>
+            </div>
+          </div>`).join('');
+
+        block.innerHTML = `
+          <div class="month-header">
+            <span class="month-name">${mesi[g.m]} <span style="font-size:14px;letter-spacing:2px;color:#2a3f6e;margin-left:4px">${g.y}</span></span>
+            <span class="month-chevron">&#8744;</span>
+            <span class="month-spacer"></span>
+            <span class="month-count">${count} promemoria</span>
+          </div>
+          <div class="reminders-wrap"><div class="reminders-wrap-inner">${cardsHTML}</div></div>
+          <div class="reminders-wrap-bottom"></div>`;
+
+        block.querySelector('.month-header').addEventListener('click', () => block.classList.toggle('open'));
+        block.querySelectorAll('.swipe-container').forEach(container => {
+          const rid  = parseInt(container.dataset.id);
+          const card = container.querySelector('.reminder-card');
+          addSwipe(card);
+          card.addEventListener('click', () => {
+            if (card.classList.contains('swiped')) { card.style.transform = 'translateX(0)'; card.classList.remove('swiped'); return; }
+            openEditForm(rid);
+          });
+          container.querySelector('.delete-bg').addEventListener('click', () => {
+            cancelNotifications(rid);
+            reminders = reminders.filter(r => r.id !== rid);
+            saveAll(); rebuildList(); updateStats();
+          });
+        });
+        list.appendChild(block);
+      });
+    }
+  }
+
+  // ── STATISTICHE ──
+  function updateStats() {
+    const today = new Date(currentYear, currentMonth, now.getDate());
+    const total = reminders.length;
+    const thisMonth = reminders.filter(r => r.month === currentMonth && (r.year || currentYear) === currentYear).length;
+    const upcoming  = reminders.filter(r => {
+      const ry = r.year || currentYear;
+      const rd = new Date(ry, r.month, r.day);
+      return rd >= today;
+    }).length;
+    const activeMonths = new Set(reminders.map(r => `${r.year||currentYear}-${r.month}`)).size;
+    document.getElementById('stat-total').textContent  = total;
+    document.getElementById('stat-month').textContent  = thisMonth;
+    document.getElementById('stat-next').textContent   = upcoming;
+    document.getElementById('stat-active').textContent = activeMonths;
+  }
+
+  // ── CALENDARIO ──
+  let calYear = currentYear, calMonth = currentMonth, calDirection = 1;
+  function reminderDays(m) { return new Set(reminders.filter(r => r.month === m).map(r => r.day)); }
+
+  function renderCal() {
+    document.getElementById('cal-title').textContent = mesiShort[calMonth].toUpperCase() + ' ' + calYear;
+    const grid = document.getElementById('cal-grid');
+    grid.className = 'cal-grid'; grid.innerHTML = '';
+    const firstDay    = new Date(calYear, calMonth, 1).getDay();
+    const startOffset = (firstDay + 6) % 7;
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const rDays = reminderDays(calMonth);
+    const cells = [];
+    for (let i = 0; i < startOffset; i++) { const c = document.createElement('div'); c.className = 'cal-cell empty'; cells.push(c); }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const cell = document.createElement('div');
+      const isToday = d === now.getDate() && calMonth === currentMonth && calYear === currentYear;
+      const hasRem  = rDays.has(d);
+      cell.className = 'cal-cell' + (isToday ? ' today' : '') + (hasRem ? ' has-reminder' : '');
+      cell.innerHTML = `<span class="cal-num">${d}</span>` + (hasRem ? `<div class="cal-dot" style="animation-delay:${(d*0.025).toFixed(2)}s"></div>` : '');
+      cell.addEventListener('click', () => {
+        document.querySelectorAll('.cal-cell.selected').forEach(c => c.classList.remove('selected'));
+        cell.classList.add('selected');
+        cell.classList.remove('tapped'); void cell.offsetWidth; cell.classList.add('tapped');
+        showDayDetail(d, calMonth, calYear);
+      });
+      cells.push(cell);
+    }
+    cells.forEach((cell, i) => { cell.classList.add('cal-row-anim'); cell.style.animationDelay = `${Math.floor(i/7)*0.045}s`; grid.appendChild(cell); });
+    requestAnimationFrame(() => grid.classList.add(calDirection >= 0 ? 'slide-right' : 'slide-left'));
+  }
+
+  function showDayDetail(day, month, year) {
+    const detail  = document.getElementById('day-detail');
+    const title   = document.getElementById('day-detail-title');
+    const content = document.getElementById('day-detail-content');
+    const dayRems = reminders.filter(r => r.month === month && r.day === day);
+    title.textContent = `${day} ${mesi[month]} ${year}`;
+    if (dayRems.length > 0) {
+      content.innerHTML = dayRems.map(r => `
+        <div class="reminder-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="flex:1;">
+            <div class="reminder-top"><span class="reminder-time-str">${r.timeStart} — ${r.timeEnd}</span></div>
+            <div class="reminder-title">${r.title}</div>
+          </div>
+          <div data-edit-id="${r.id}" style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:rgba(42,63,110,0.15);border:1px solid #2a3f6e;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="#2a3f6e" stroke-width="2" stroke-linecap="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="#2a3f6e" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>`).join('');
+      content.querySelectorAll('[data-edit-id]').forEach(btn => btn.addEventListener('click', () => openEditForm(parseInt(btn.dataset.editId))));
+    } else {
+      content.innerHTML = `<div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:#333;padding:6px 0;">nessun promemoria</div>`;
+    }
+    detail.classList.remove('open'); void detail.offsetWidth; detail.classList.add('open');
+  }
+
+  function changeCalMonth(dir) {
+    calDirection = dir;
+    document.getElementById('day-detail').classList.remove('open');
+    calMonth += dir;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    if (calMonth < 0)  { calMonth = 11; calYear--; }
+    renderCal();
+  }
+
+  const calPanel = document.getElementById('cal-panel');
+  let calSwipeX = 0, calMouseX = 0, calMouseDrag = false;
+  calPanel.addEventListener('touchstart', e => { calSwipeX = e.touches[0].clientX; }, { passive: true });
+  calPanel.addEventListener('touchend',   e => { const d = e.changedTouches[0].clientX - calSwipeX; if (Math.abs(d) >= 40) changeCalMonth(d < 0 ? 1 : -1); }, { passive: true });
+  calPanel.addEventListener('mousedown',  e => { calMouseX = e.clientX; calMouseDrag = true; });
+  calPanel.addEventListener('mouseup',    e => { if (!calMouseDrag) return; calMouseDrag = false; const d = e.clientX - calMouseX; if (Math.abs(d) >= 40) changeCalMonth(d < 0 ? 1 : -1); });
+  document.getElementById('cal-prev').addEventListener('click', () => changeCalMonth(-1));
+  document.getElementById('cal-next').addEventListener('click', () => changeCalMonth(1));
+
+  // ── PROFILO ──
+  document.querySelectorAll('.toggle').forEach(t => {
+    t.addEventListener('click', () => {
+      const on = t.classList.contains('on');
+      t.classList.toggle('on', !on); t.classList.toggle('off', on);
+      saveAll();
+      // Se notifiche disabilitate, cancella tutte
+      if (t.id === 'tog-notif' && on) {
+        reminders.forEach(r => cancelNotifications(r.id));
+      }
+      if (t.id === 'tog-notif' && !on) {
+        rescheduleAllPending();
+      }
+    });
+  });
+
+  const avatarWrap  = document.getElementById('avatar-wrap');
+  const avatarInput = document.getElementById('avatar-input');
+  const avatarImg   = document.getElementById('avatar-img');
+  const avatarPh    = document.getElementById('avatar-placeholder');
+  avatarWrap.addEventListener('click', () => avatarInput.click());
+  avatarInput.addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      avatarImg.src = ev.target.result; avatarImg.style.display = 'block'; avatarPh.style.display = 'none';
+      saveAll();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const userDisplay = document.getElementById('username-display');
+  const userInput   = document.getElementById('username-input');
+  userDisplay.addEventListener('click', () => {
+    userInput.value = userDisplay.textContent === 'il tuo nome' ? '' : userDisplay.textContent;
+    userDisplay.style.display = 'none'; userInput.style.display = 'block'; userInput.focus();
+  });
+  userInput.addEventListener('blur', () => {
+    userDisplay.textContent = userInput.value.trim() || 'il tuo nome';
+    userDisplay.style.display = 'block'; userInput.style.display = 'none';
+    saveAll();
+  });
+  userInput.addEventListener('keydown', e => { if (e.key === 'Enter') userInput.blur(); });
+
+  // ── ANTICIPO NOTIFICHE ──
+  function changeHours(type, delta) {
+    notifConfig[type] = Math.max(1, Math.min(23, notifConfig[type] + delta));
+    document.getElementById(`${type}-hours-display`).textContent = notifConfig[type];
+    saveAll();
+  }
+
+  // ── AVVIO ──
+  loadAll();
+  loadScheduledMap();
+  rebuildList();
+  updateStats();
+  renderCal();
+
+  // Rischedula notifiche pendenti dopo breve delay (attende SW ready)
+  setTimeout(rescheduleAllPending, 1500);
+</script>
+</body>
+</html>
