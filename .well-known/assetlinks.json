@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.kikodavide.twa",
+    "sha256_cert_fingerprints": [
+      "08:34:2C:21:9B:25:97:DA:96:6E:9F:9E:97:8D:23:C3:23:4F:82:01:8C:A3:A5:63:F6:8A:6B:41:AB:AB:CF:E0"
+    ]
+  }
+}]
