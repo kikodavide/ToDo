@@ -2,38 +2,25 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Promemoria">
-<link rel="manifest" href="./manifest.json">
-<link rel="apple-touch-icon" href="./icon-192.png">
-<title>Promemoria</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000; margin: 0; padding: 0; }
+  * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
   .phone {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    background: #000;
-    position: relative;
-    overflow: hidden;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    width: 100vw; height: 100vh; background: #000;
+    position: relative; overflow: hidden;
   }
 
   /* ── DATE ── */
   .date-display {
-    position: absolute; top: 70px; left: 50%;
+    position: absolute; top: 130px; left: 50%;
     transform: translateX(-50%);
     display: inline-flex; flex-direction: column; align-items: center;
     transition: top 0.3s ease, opacity 0.3s ease; z-index: 5;
   }
-  .date-display.compact { top: 24px; }
+  .date-display.compact { top: 46px; }
   .date-display.hidden-date { opacity: 0; pointer-events: none; }
   .date-day {
     font-family: 'Orbitron', sans-serif; font-weight: 400;
@@ -47,10 +34,10 @@
 
   /* ── CONTENT AREA ── */
   .content-area {
-    position: absolute; top: 250px; left: 0; right: 0; bottom: 80px;
+    position: absolute; top: 330px; left: 0; right: 0; bottom: 80px;
     overflow: hidden; transition: top 0.3s ease;
   }
-  .content-area.compact { top: 140px; }
+  .content-area.compact { top: 185px; }
   .content-area.full    { top: 0; }
 
   /* ── PANELS ── */
@@ -306,16 +293,16 @@
   }
 
   /* ── FADE ── */
-  .months-fade { position: absolute; bottom: 76px; left: 0; right: 0; height: 60px; background: linear-gradient(to bottom, transparent, #000); pointer-events: none; z-index: 10; transition: opacity 0.25s; }
+  .months-fade { position: absolute; bottom: 80px; left: 0; right: 0; height: 60px; background: linear-gradient(to bottom, transparent, #000); pointer-events: none; z-index: 10; transition: opacity 0.25s; }
 
   /* ── ICONS ── */
   .icon-btn { position: absolute; width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: rgba(42,63,110,0.12); box-shadow: 0 0 6px rgba(42,63,110,0.35), 0 0 14px rgba(42,63,110,0.15); cursor: pointer; z-index: 20; }
   .icon-btn.active { background: rgba(42,63,110,0.35); box-shadow: 0 0 10px rgba(42,63,110,0.7); }
   .icon-btn svg { width: 30px; height: 30px; }
-  .icon-profile  { top: 20px; right: 20px; }
-  .icon-calendar { bottom: 16px; left: 20px; }
-  .icon-add      { bottom: 16px; right: 20px; }
-  .home-indicator { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 100px; height: 4px; background: #222; border-radius: 2px; }
+  .icon-profile  { top: 28px; right: 20px; }
+  .icon-calendar { bottom: 28px; left: 20px; }
+  .icon-add      { bottom: 28px; right: 20px; }
+  .home-indicator { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 100px; height: 4px; background: #222; border-radius: 2px; }
   .camera-dot { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: #111; border-radius: 50%; border: 1px solid #222; }
 </style>
 </head>
@@ -555,12 +542,42 @@
     } catch(e) { console.warn('loadAll error', e); }
   }
 
-  // ── SERVICE WORKER (file esterno sw.js) ──
+  // ── SERVICE WORKER INLINE per notifiche in background ──
+  const SW_CODE = `
+    const DB = 'promemoria_sw';
+    self.addEventListener('message', e => {
+      if (e.data && e.data.type === 'SCHEDULE') {
+        const { id, title, body, triggerMs } = e.data;
+        const delay = triggerMs - Date.now();
+        if (delay <= 0) return;
+        setTimeout(() => {
+          self.registration.showNotification(title, {
+            body, icon: '', badge: '',
+            tag: 'rem_' + id,
+            data: { id }
+          });
+        }, delay);
+      }
+      if (e.data && e.data.type === 'CANCEL') {
+        self.registration.getNotifications({ tag: 'rem_' + e.data.id }).then(ns => ns.forEach(n => n.close()));
+      }
+    });
+    self.addEventListener('notificationclick', e => {
+      e.notification.close();
+      e.waitUntil(clients.matchAll({ type: 'window' }).then(cs => {
+        if (cs.length) cs[0].focus();
+        else clients.openWindow('/');
+      }));
+    });
+  `;
+
   let swReg = null;
   async function initSW() {
     if (!('serviceWorker' in navigator)) return;
     try {
-      swReg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+      const blob = new Blob([SW_CODE], { type: 'application/javascript' });
+      const url  = URL.createObjectURL(blob);
+      swReg = await navigator.serviceWorker.register(url, { scope: '/' });
       await navigator.serviceWorker.ready;
     } catch(e) { console.warn('SW non disponibile:', e.message); }
   }
@@ -835,24 +852,15 @@
     window.addEventListener('mouseup',    onEnd);
   }
 
-  // ── LISTA MESI (multi-anno, con promemoria passati) ──
+  // ── LISTA MESI ──
   function rebuildList() {
     const list = document.getElementById('months-list');
     list.innerHTML = '';
-
-    // Blocchi da mostrare: 24 mesi in avanti dal mese corrente
-    let animIdx = 0;
-    for (let i = 0; i < 24; i++) {
-      const totalMonth = currentMonth + i;
-      const m = totalMonth % 12;
-      const y = currentYear + Math.floor(totalMonth / 12);
-
-      const rems  = reminders.filter(r => r.month === m && (r.year || currentYear) === y)
-                              .sort((a, b) => a.day - b.day);
+    for (let m = currentMonth; m <= 11; m++) {
+      const rems  = reminders.filter(r => r.month === m).sort((a,b) => a.day - b.day);
       const count = rems.length;
-
       const block = document.createElement('div');
-      block.className = 'month-block' + (i === 0 ? ' open' : '');
+      block.className = 'month-block' + (m === currentMonth ? ' open' : '');
 
       let cardsHTML = count > 0
         ? rems.map(r => `
@@ -870,15 +878,10 @@
         : `<div class="reminder-card"><div class="reminder-title" style="color:#333">nessun promemoria</div></div>`;
 
       const countLabel = `<span class="month-count">${count > 0 ? count + ' promemoria' : 'nessun promemoria'}</span>`;
-      // Mostra l'anno quando cambia rispetto al blocco precedente
-      const showYear = (i === 0 && y !== currentYear) || (m === 0 && i > 0);
-      const monthNameHTML = showYear
-        ? `${mesi[m]} <span style="font-size:14px;letter-spacing:2px;color:#2a3f6e;margin-left:4px">${y}</span>`
-        : mesi[m];
 
       block.innerHTML = `
         <div class="month-header">
-          <span class="month-name">${monthNameHTML}</span>
+          <span class="month-name">${mesi[m]}</span>
           <span class="month-chevron">&#8744;</span>
           <span class="month-spacer"></span>
           ${countLabel}
@@ -886,9 +889,7 @@
         <div class="reminders-wrap"><div class="reminders-wrap-inner">${cardsHTML}</div></div>
         <div class="reminders-wrap-bottom"></div>`;
 
-      block.style.animationDelay = `${animIdx * 0.07}s`;
-      animIdx++;
-
+      block.style.animationDelay = `${(m - currentMonth) * 0.07}s`;
       block.querySelector('.month-header').addEventListener('click', () => block.classList.toggle('open'));
 
       block.querySelectorAll('.swipe-container').forEach(container => {
@@ -908,89 +909,14 @@
 
       list.appendChild(block);
     }
-
-    // Aggiunge eventuali promemoria di mesi passati (non inclusi nei 24 in avanti)
-    const pastRems = reminders.filter(r => {
-      const ry = r.year || currentYear;
-      return ry < currentYear || (ry === currentYear && r.month < currentMonth);
-    });
-    if (pastRems.length > 0) {
-      // Raggruppa per anno-mese
-      const groups = {};
-      pastRems.forEach(r => {
-        const ry = r.year || currentYear;
-        const key = `${ry}-${String(r.month).padStart(2,'0')}`;
-        if (!groups[key]) groups[key] = { y: ry, m: r.month, rems: [] };
-        groups[key].rems.push(r);
-      });
-      const sortedKeys = Object.keys(groups).sort();
-      // Sezione "passati" in fondo
-      const divider = document.createElement('div');
-      divider.style.cssText = 'font-family:"Bebas Neue",sans-serif;font-size:11px;letter-spacing:3px;color:#2a3f6e;padding:16px 20px 4px;';
-      divider.textContent = 'promemoria passati';
-      list.appendChild(divider);
-
-      sortedKeys.forEach(key => {
-        const g = groups[key];
-        const rems = g.rems.sort((a,b) => a.day - b.day);
-        const block = document.createElement('div');
-        block.className = 'month-block';
-        block.style.opacity = '0.55';
-        const count = rems.length;
-        const cardsHTML = rems.map(r => `
-          <div class="swipe-container" data-id="${r.id}">
-            <div class="delete-bg"><span>elimina</span></div>
-            <div class="reminder-card" data-id="${r.id}">
-              <div class="reminder-top">
-                <span class="reminder-date-str">${r.date}</span>
-                <span class="reminder-time-str">${r.timeStart} — ${r.timeEnd}</span>
-              </div>
-              <div class="reminder-title">${r.title}</div>
-              <div class="edit-hint">tocca per modificare · scorri per eliminare</div>
-            </div>
-          </div>`).join('');
-
-        block.innerHTML = `
-          <div class="month-header">
-            <span class="month-name">${mesi[g.m]} <span style="font-size:14px;letter-spacing:2px;color:#2a3f6e;margin-left:4px">${g.y}</span></span>
-            <span class="month-chevron">&#8744;</span>
-            <span class="month-spacer"></span>
-            <span class="month-count">${count} promemoria</span>
-          </div>
-          <div class="reminders-wrap"><div class="reminders-wrap-inner">${cardsHTML}</div></div>
-          <div class="reminders-wrap-bottom"></div>`;
-
-        block.querySelector('.month-header').addEventListener('click', () => block.classList.toggle('open'));
-        block.querySelectorAll('.swipe-container').forEach(container => {
-          const rid  = parseInt(container.dataset.id);
-          const card = container.querySelector('.reminder-card');
-          addSwipe(card);
-          card.addEventListener('click', () => {
-            if (card.classList.contains('swiped')) { card.style.transform = 'translateX(0)'; card.classList.remove('swiped'); return; }
-            openEditForm(rid);
-          });
-          container.querySelector('.delete-bg').addEventListener('click', () => {
-            cancelNotifications(rid);
-            reminders = reminders.filter(r => r.id !== rid);
-            saveAll(); rebuildList(); updateStats();
-          });
-        });
-        list.appendChild(block);
-      });
-    }
   }
 
   // ── STATISTICHE ──
   function updateStats() {
-    const today = new Date(currentYear, currentMonth, now.getDate());
-    const total = reminders.length;
-    const thisMonth = reminders.filter(r => r.month === currentMonth && (r.year || currentYear) === currentYear).length;
-    const upcoming  = reminders.filter(r => {
-      const ry = r.year || currentYear;
-      const rd = new Date(ry, r.month, r.day);
-      return rd >= today;
-    }).length;
-    const activeMonths = new Set(reminders.map(r => `${r.year||currentYear}-${r.month}`)).size;
+    const total       = reminders.length;
+    const thisMonth   = reminders.filter(r => r.month === currentMonth).length;
+    const upcoming    = reminders.filter(r => r.month > currentMonth || (r.month === currentMonth && r.day >= now.getDate())).length;
+    const activeMonths = new Set(reminders.map(r => r.month)).size;
     document.getElementById('stat-total').textContent  = total;
     document.getElementById('stat-month').textContent  = thisMonth;
     document.getElementById('stat-next').textContent   = upcoming;
